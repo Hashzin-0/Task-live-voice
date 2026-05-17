@@ -1,0 +1,8 @@
+{
+  "name": "Todo App",
+  "description": "A beautiful and modern To-Do list application with filtering and local storage persistence.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
