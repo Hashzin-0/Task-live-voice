@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Mic, MicOff, Loader2, Settings, X, Activity, MessageSquare, Trash2, BellRing } from "lucide-react";
+import { Mic, MicOff, Loader2, Settings, X, Activity } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 
 const pcmToBase64 = (f32Array: Float32Array) => {
@@ -23,13 +23,6 @@ const pcmToBase64 = (f32Array: Float32Array) => {
 	return btoa(binary);
 };
 
-export interface ChatMessage {
-	id: string;
-	role: "user" | "assistant";
-	text: string;
-	timestamp: number;
-}
-
 export default function VoiceChat({
 	todos,
 	onAddTodo,
@@ -46,25 +39,6 @@ export default function VoiceChat({
 	const [isActive, setIsActive] = useState(false);
 	const [isConnecting, setIsConnecting] = useState(false);
 	const [showSettings, setShowSettings] = useState(false);
-	const [showHistory, setShowHistory] = useState(false);
-	const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
-	const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | "default">(
-		typeof window !== "undefined" && "Notification" in window ? Notification.permission : "default"
-	);
-
-	const requestNotificationPermission = async () => {
-		if (typeof window !== "undefined" && "Notification" in window) {
-			const result = await Notification.requestPermission();
-			setNotificationPermission(result);
-			if (result === "granted") {
-				new Notification("Notificações Ativadas!", {
-					body: "Você receberá alertas importantes do Alex por aqui.",
-				});
-			}
-		} else {
-			alert("Seu navegador não suporta notificações.");
-		}
-	};
 
 	// Settings State
 	const [voiceName, setVoiceName] = useState("Puck");
@@ -94,7 +68,6 @@ export default function VoiceChat({
 	const videoRef = useRef<HTMLVideoElement | null>(null);
 	const canvasRef = useRef<HTMLCanvasElement | null>(null);
 	const videoIntervalRef = useRef<any>(null);
-	const startVoiceRef = useRef<((p?: string) => Promise<void>) | null>(null);
 
 	const todosRef = useRef(todos);
 	useEffect(() => {
@@ -114,33 +87,21 @@ export default function VoiceChat({
 		const savedOnlineSearch = localStorage.getItem("onlineSearch");
 		const savedLocation = localStorage.getItem("location");
 		const savedCamera = localStorage.getItem("cameraEnabled");
-		const savedChatHistory = localStorage.getItem("chatHistory");
 
-		setTimeout(() => {
-			if (savedVoice) setVoiceName(savedVoice);
-			if (savedPersonality) setPersonality(savedPersonality);
-			if (savedWakeWord) setWakeWordEnabled(savedWakeWord === "true");
-			if (savedUserName) setUserName(savedUserName);
-			if (savedAssistantName) setAssistantName(savedAssistantName);
-			if (savedVerbosity) setVerbosity(savedVerbosity);
-			if (savedSpeechSpeed) setSpeechSpeed(savedSpeechSpeed);
-			if (savedSoundEffects !== null)
-				setSoundEffectsEnabled(savedSoundEffects === "true");
-			if (savedOnlineSearch !== null)
-				setOnlineSearchEnabled(savedOnlineSearch === "true");
-			if (savedLocation !== null) setLocationEnabled(savedLocation === "true");
-			if (savedCamera !== null) setCameraEnabled(savedCamera === "true");
-			if (savedChatHistory !== null) {
-				try {
-					setChatHistory(JSON.parse(savedChatHistory));
-				} catch (e) {}
-			}
-		}, 0);
+		if (savedVoice) setVoiceName(savedVoice);
+		if (savedPersonality) setPersonality(savedPersonality);
+		if (savedWakeWord) setWakeWordEnabled(savedWakeWord === "true");
+		if (savedUserName) setUserName(savedUserName);
+		if (savedAssistantName) setAssistantName(savedAssistantName);
+		if (savedVerbosity) setVerbosity(savedVerbosity);
+		if (savedSpeechSpeed) setSpeechSpeed(savedSpeechSpeed);
+		if (savedSoundEffects !== null)
+			setSoundEffectsEnabled(savedSoundEffects === "true");
+		if (savedOnlineSearch !== null)
+			setOnlineSearchEnabled(savedOnlineSearch === "true");
+		if (savedLocation !== null) setLocationEnabled(savedLocation === "true");
+		if (savedCamera !== null) setCameraEnabled(savedCamera === "true");
 	}, []);
-
-	useEffect(() => {
-		localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
-	}, [chatHistory]);
 
 	useEffect(() => {
 		localStorage.setItem("voiceName", voiceName);
@@ -172,11 +133,9 @@ export default function VoiceChat({
 	useEffect(() => {
 		const saved = localStorage.getItem("customWakeWords");
 		if (saved) {
-			setTimeout(() => {
-				try {
-					setCustomWakeWords(JSON.parse(saved));
-				} catch (e) {}
-			}, 0);
+			try {
+				setCustomWakeWords(JSON.parse(saved));
+			} catch (e) {}
 		}
 	}, []);
 
@@ -246,55 +205,6 @@ export default function VoiceChat({
 		} catch (e) {}
 	};
 
-	useEffect(() => {
-		let recognition: any;
-		if (isActive && typeof window !== "undefined") {
-			const SpeechRecognition =
-				(window as any).SpeechRecognition ||
-				(window as any).webkitSpeechRecognition;
-			
-			if (SpeechRecognition) {
-				recognition = new SpeechRecognition();
-				recognition.continuous = true;
-				recognition.interimResults = false; // Need final results only for history
-				recognition.lang = "pt-BR";
-
-				recognition.onresult = (event: any) => {
-					for (let i = event.resultIndex; i < event.results.length; ++i) {
-						if (event.results[i].isFinal) {
-							const text = event.results[i][0].transcript.trim();
-							if (text) {
-								setChatHistory((prev) => [...prev, {
-									id: crypto.randomUUID(),
-									role: 'user',
-									text: text,
-									timestamp: Date.now()
-								}]);
-							}
-						}
-					}
-				};
-
-				recognition.onend = () => {
-					if (isActive) {
-						try { recognition.start(); } catch (e) {}
-					}
-				};
-
-				try {
-					recognition.start();
-				} catch (e) {}
-			}
-		}
-
-		return () => {
-			if (recognition) {
-				recognition.onend = null;
-				try { recognition.stop(); } catch (e) {}
-			}
-		};
-	}, [isActive]);
-
 	// Wake Word listener implementation
 	useEffect(() => {
 		let recognition: any;
@@ -356,7 +266,7 @@ export default function VoiceChat({
 									.substring(idx + matchStr.length)
 									.trim();
 
-								startVoiceRef.current?.(remaining);
+								startVoice(remaining);
 								break;
 							}
 						}
@@ -382,7 +292,7 @@ export default function VoiceChat({
 				} catch (e) {}
 			}
 		};
-	}, [wakeWordEnabled, isActive, isTrainingWakeWord, customWakeWords, assistantName]);
+	}, [wakeWordEnabled, isActive, isTrainingWakeWord, customWakeWords]);
 
 	const toggleVoice = async () => {
 		if (isActive) {
@@ -428,15 +338,6 @@ export default function VoiceChat({
 	};
 
 	const startVoice = async (initialPrompt?: string) => {
-		if (initialPrompt && initialPrompt.trim()) {
-			setChatHistory((prev) => [...prev, {
-				id: crypto.randomUUID(),
-				role: 'user',
-				text: initialPrompt.trim(),
-				timestamp: Date.now()
-			}]);
-		}
-
 		try {
 			setIsConnecting(true);
 			const host = window.location.host;
@@ -580,26 +481,6 @@ export default function VoiceChat({
 					playingSourcesRef.current.clear();
 					nextStartTimeRef.current = audioCtxRef.current?.currentTime || 0;
 				}
-				if (msg.textResponse && typeof msg.textResponse === "string" && msg.textResponse.trim()) {
-					setChatHistory((prev) => {
-						// Don't add duplicate text if it fired in chunks but maybe it sends whole sentences.
-						// Actually Gemini live sends chunks. We can group chunks if timestamps are close, but adding a new message for each chunk is fine for simple view, or we concatenate if last message was assistant.
-						const last = prev[prev.length - 1];
-						if (last && last.role === 'assistant') {
-							const updated = [...prev];
-							updated[updated.length - 1] = { ...last, text: last.text + msg.textResponse };
-							return updated;
-						} else {
-							return [...prev, {
-								id: crypto.randomUUID(),
-								role: 'assistant',
-								text: msg.textResponse,
-								timestamp: Date.now()
-							}];
-						}
-					});
-				}
-
 				if (msg.toolCall) {
 					handleToolCall(msg.toolCall);
 				}
@@ -613,10 +494,6 @@ export default function VoiceChat({
 			stopVoice();
 		}
 	};
-	
-	useEffect(() => {
-		startVoiceRef.current = startVoice;
-	});
 
 	const handleToolCall = (toolCallMsg: any) => {
 		const calls = toolCallMsg.functionCalls || [];
@@ -678,29 +555,10 @@ export default function VoiceChat({
 					</motion.div>
 				)}
 				<div className="flex items-center gap-3">
-					{notificationPermission !== "granted" && (
-						<button
-							onClick={requestNotificationPermission}
-							className="p-3 bg-white rounded-full shadow-md text-amber-500 hover:text-amber-600 transition-colors border border-slate-100"
-							title="Permitir Notificações"
-						>
-							<BellRing className="w-5 h-5" />
-						</button>
-					)}
-
-					<button
-						onClick={() => setShowHistory(true)}
-						className="p-3 bg-white rounded-full shadow-md text-slate-500 hover:text-indigo-600 transition-colors border border-slate-100"
-						title="Histórico de Conversação"
-					>
-						<MessageSquare className="w-5 h-5" />
-					</button>
-
 					<button
 						onClick={() => setShowSettings(true)}
 						className="p-3 bg-white rounded-full shadow-md text-slate-500 hover:text-indigo-600 transition-colors border border-slate-100 disabled:opacity-50"
 						disabled={isActive || isConnecting}
-						title="Configurações do Assistente"
 					>
 						<Settings className="h-5 w-5" />
 					</button>
@@ -733,79 +591,6 @@ export default function VoiceChat({
 					</motion.button>
 				</div>
 			</div>
-
-			<AnimatePresence>
-				{showHistory && (
-					<div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
-						<motion.div
-							initial={{ opacity: 0 }}
-							animate={{ opacity: 1 }}
-							exit={{ opacity: 0 }}
-							onClick={() => setShowHistory(false)}
-							className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
-						/>
-						<motion.div
-							initial={{ opacity: 0, scale: 0.95, y: 10 }}
-							animate={{ opacity: 1, scale: 1, y: 0 }}
-							exit={{ opacity: 0, scale: 0.95, y: 10 }}
-							className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
-						>
-							<div className="p-4 border-b border-slate-100 flex items-center justify-between bg-white flex-shrink-0">
-								<div className="flex items-center gap-2">
-									<MessageSquare className="w-5 h-5 text-indigo-500" />
-									<h2 className="text-lg font-bold text-slate-800">Histórico</h2>
-								</div>
-								<div className="flex items-center gap-2">
-									<button
-										onClick={() => {
-											if (confirm("Apagar todo o histórico?")) {
-												setChatHistory([]);
-											}
-										}}
-										className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
-										title="Limpar Histórico"
-									>
-										<Trash2 className="w-4 h-4" />
-									</button>
-									<button
-										onClick={() => setShowHistory(false)}
-										className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-colors"
-									>
-										<X className="w-5 h-5" />
-									</button>
-								</div>
-							</div>
-
-							<div className="p-4 overflow-y-auto flex-1 space-y-4 bg-slate-50">
-								{chatHistory.length === 0 ? (
-									<div className="flex flex-col items-center justify-center h-full text-slate-400 gap-2">
-										<MessageSquare className="w-10 h-10 opacity-20" />
-										<p className="text-sm">Nenhuma conversa recente.</p>
-									</div>
-								) : (
-									chatHistory.map((msg, index) => {
-										const isAssistant = msg.role === 'assistant';
-										return (
-											<div key={msg.id || index} className={`flex ${isAssistant ? 'justify-start' : 'justify-end'}`}>
-												<div className={`max-w-[85%] rounded-2xl px-4 py-2 ${
-													isAssistant 
-														? 'bg-white border border-slate-100 text-slate-700 shadow-sm rounded-tl-none' 
-														: 'bg-indigo-500 text-white shadow-md rounded-tr-none'
-												}`}>
-													<p className="text-sm whitespace-pre-wrap leading-relaxed">{msg.text}</p>
-													<span className={`text-[10px] mt-1 block ${isAssistant ? 'text-slate-400' : 'text-indigo-200'}`}>
-														{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-													</span>
-												</div>
-											</div>
-										);
-									})
-								)}
-							</div>
-						</motion.div>
-					</div>
-				)}
-			</AnimatePresence>
 
 			<AnimatePresence>
 				{showSettings && (
@@ -1057,11 +842,11 @@ export default function VoiceChat({
 									<div className="flex items-center justify-between mb-4">
 										<div className="pr-4">
 											<label className="block text-sm font-semibold text-slate-800">
-												Palavra de Ativação &quot;{assistantName || "Alex"}&quot;
+												Palavra de Ativação "{assistantName || "Alex"}"
 											</label>
 											<p className="text-xs text-slate-500 mt-1">
-												Ligar a escuta automaticamente dizendo &quot;
-												{assistantName || "Alex"}&quot;.
+												Ligar a escuta automaticamente dizendo "
+												{assistantName || "Alex"}".
 											</p>
 										</div>
 										<label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
@@ -1080,7 +865,7 @@ export default function VoiceChat({
 											Treinamento (Seu Timbre)
 										</label>
 										<p className="text-[11px] text-slate-500 mb-3 mt-1">
-											Grave até 5 formas que você fala o nome &quot;Alex&quot; para que
+											Grave até 5 formas que você fala o nome "Alex" para que
 											ele não se perca no seu sotaque.
 										</p>
 
@@ -1090,7 +875,7 @@ export default function VoiceChat({
 												className="w-full flex items-center justify-center gap-2 py-2.5 bg-red-100 text-red-600 rounded-xl text-sm font-medium border border-red-200 transition-colors"
 											>
 												<Activity className="h-4 w-4 animate-pulse" />{" "}
-												Ouvindo... Diga &quot;{assistantName || "Alex"}&quot;
+												Ouvindo... Diga "{assistantName || "Alex"}"
 											</button>
 										) : (
 											<button

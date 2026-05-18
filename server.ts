@@ -209,19 +209,12 @@ Your roles:
 							model: "gemini-3.1-flash-live-preview",
 							callbacks: {
 								onmessage: (message: LiveServerMessage) => {
-									const parts = message.serverContent?.modelTurn?.parts;
-									if (parts) {
-										for (const part of parts) {
-											if (part.text) {
-												if (clientWs.readyState === clientWs.OPEN) {
-													clientWs.send(JSON.stringify({ textResponse: part.text }));
-												}
-											}
-											if (part.inlineData?.data) {
-												if (clientWs.readyState === clientWs.OPEN) {
-													clientWs.send(JSON.stringify({ audio: part.inlineData.data }));
-												}
-											}
+									const audio =
+										message.serverContent?.modelTurn?.parts?.[0]?.inlineData
+											?.data;
+									if (audio) {
+										if (clientWs.readyState === clientWs.OPEN) {
+											clientWs.send(JSON.stringify({ audio }));
 										}
 									}
 									if (message.serverContent?.interrupted) {
@@ -255,7 +248,7 @@ Your roles:
 										}
 										
 										if (serverResponses.functionResponses.length > 0) {
-											session?.sendToolResponse(serverResponses);
+											session?.send({ toolResponse: serverResponses });
 										}
 										if (clientTools.functionCalls.length > 0) {
 											if (clientWs.readyState === clientWs.OPEN) {
@@ -268,7 +261,7 @@ Your roles:
 								},
 							},
 							config: {
-								responseModalities: [Modality.AUDIO, "TEXT" as any],
+								responseModalities: [Modality.AUDIO],
 								speechConfig: {
 									voiceConfig: {
 										prebuiltVoiceConfig: { voiceName: voiceName || "Aoede" },
@@ -285,14 +278,18 @@ Your roles:
 						clientWs.send(JSON.stringify({ type: "ready" }));
 
 						if (initialPrompt && initialPrompt.length > 0) {
-							session.sendClientContent({
-								turns: [{ role: "user", parts: [{ text: `Comando inicial detectado junto com a palavra de ativação: "${initialPrompt}". Por favor, execute isso agora as instruções relacionadas e responda.` }] }],
-								turnComplete: true,
+							session.send({
+								clientContent: {
+									turns: [{ role: "user", parts: [{ text: `Comando inicial detectado junto com a palavra de ativação: "${initialPrompt}". Por favor, execute isso agora as instruções relacionadas e responda.` }] }],
+									turnComplete: true,
+								},
 							});
 						} else {
-							session.sendClientContent({
-								turns: [{ role: "user", parts: [{ text: "Ativação detectada. Estou em silêncio por enquanto. Se eu não falar nada em 2 segundos, diga 'Sim?' ou algo similar. E se após mais 5 segundos não houver resposta, execute a tool endConversation." }] }],
-								turnComplete: true,
+							session.send({
+								clientContent: {
+									turns: [{ role: "user", parts: [{ text: "Ativação detectada. Estou em silêncio por enquanto. Se eu não falar nada em 2 segundos, diga 'Sim?' ou algo similar. E se após mais 5 segundos não houver resposta, execute a tool endConversation." }] }],
+									turnComplete: true,
+								},
 							});
 						}
 					}
